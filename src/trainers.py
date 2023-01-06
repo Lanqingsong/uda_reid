@@ -149,7 +149,7 @@ class Baseline_Trainer(object):
 
 class Pre_Trainer(object):
     def __init__(self, model, xbm, num_classes, margin=None):
-        super(Baseline_Trainer, self).__init__()
+        super(Pre_Trainer, self).__init__()
         self.model = model
         self.xbm = xbm
         self.num_classes = num_classes
