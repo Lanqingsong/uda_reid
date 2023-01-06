@@ -188,10 +188,10 @@ class Pre_Trainer(object):
             def reshape(inputs):
                 return inputs.view(device_num, -1, C, H, W)
 
-            s_inputs, t_inputs = reshape(s_inputs), reshape(t_inputs)
-            inputs = torch.cat((s_inputs), 1).view(-1, C, H, W)
+            s_inputs = reshape(s_inputs)
+            inputs = s_inputs.view(-1, C, H, W)
 
-            targets = torch.cat((s_targets.view(device_num, -1)), 1)
+            targets = s_targets.view(device_num, -1)
             targets = targets.view(-1)
             # forward
             prob, feats = self._forward(inputs)
@@ -200,6 +200,7 @@ class Pre_Trainer(object):
             # split feats
             ori_feats = feats.view(device_num, -1, feats.size(-1))
 
+            ori_feats = ori_feats.view(-1, ori_feats.size(-1))
 
             # classification+triplet
             loss_ce = self.criterion_ce(prob, targets)
@@ -220,8 +221,8 @@ class Pre_Trainer(object):
             optimizer.step()
 
             ori_prob = prob.view(device_num, -1, prob.size(-1))
-            prob_s, prob_t = ori_prob.split(ori_prob.size(1) // 2, dim=1)
-            prob_s, prob_t = prob_s.contiguous(), prob_t.contiguous()
+            prob_s = ori_prob
+            prob_s = prob_s.contiguous()
             prec_s, = accuracy(prob_s.view(-1, prob_s.size(-1)).data, s_targets.data)
 
             losses.update(loss.item())
