@@ -147,6 +147,137 @@ class Baseline_Trainer(object):
         return self.model(inputs)
 
 
+class Pre_Trainer(object):
+    def __init__(self, model, xbm, num_classes, margin=None):
+        super(Baseline_Trainer, self).__init__()
+        self.model = model
+        self.xbm = xbm
+        self.num_classes = num_classes
+        self.criterion_ce = CrossEntropyLabelSmooth(num_classes).cuda()
+        self.criterion_tri = TripletLoss(margin=margin).cuda()
+        self.criterion_tri_xbm = TripletLossXBM(margin=margin)
+
+    def train(self, epoch, data_loader_source, source_classes, target_classes,
+              optimizer, print_freq=50, train_iters=400, use_xbm=False):
+        self.criterion_ce = CrossEntropyLabelSmooth(source_classes + target_classes).cuda()
+
+        self.model.train()
+
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        losses = AverageMeter()
+        losses_ce = AverageMeter()
+        losses_tri = AverageMeter()
+        losses_xbm = AverageMeter()
+        precisions_s = AverageMeter()
+        precisions_t = AverageMeter()
+
+        end = time.time()
+        for i in range(train_iters):
+            # load data
+            source_inputs = data_loader_source.next()
+            data_time.update(time.time() - end)
+
+            # process inputs
+            s_inputs, s_targets, _ = self._parse_data(source_inputs)
+
+            # arrange batch for domain-specific BN
+            device_num = torch.cuda.device_count()
+            B, C, H, W = s_inputs.size()
+
+            def reshape(inputs):
+                return inputs.view(device_num, -1, C, H, W)
+
+            s_inputs, t_inputs = reshape(s_inputs), reshape(t_inputs)
+            inputs = torch.cat((s_inputs), 1).view(-1, C, H, W)
+
+            targets = torch.cat((s_targets.view(device_num, -1)), 1)
+            targets = targets.view(-1)
+            # forward
+            prob, feats = self._forward(inputs)
+            prob = prob[:, 0:source_classes ]
+
+            # split feats
+            ori_feats = feats.view(device_num, -1, feats.size(-1))
+
+
+            # classification+triplet
+            loss_ce = self.criterion_ce(prob, targets)
+            loss_tri = self.criterion_tri(ori_feats, targets)
+
+            # enqueue and dequeue for xbm
+            if use_xbm:
+                self.xbm.enqueue_dequeue(ori_feats.detach(), targets.detach())
+                xbm_feats, xbm_targets = self.xbm.get()
+                loss_xbm = self.criterion_tri_xbm(ori_feats, targets, xbm_feats, xbm_targets)
+                losses_xbm.update(loss_xbm.item())
+                loss = loss_ce + loss_tri + loss_xbm
+            else:
+                loss = loss_ce + loss_tri
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            ori_prob = prob.view(device_num, -1, prob.size(-1))
+            prob_s, prob_t = ori_prob.split(ori_prob.size(1) // 2, dim=1)
+            prob_s, prob_t = prob_s.contiguous(), prob_t.contiguous()
+            prec_s, = accuracy(prob_s.view(-1, prob_s.size(-1)).data, s_targets.data)
+
+            losses.update(loss.item())
+            losses_ce.update(loss_ce.item())
+            losses_tri.update(loss_tri.item())
+            precisions_s.update(prec_s[0])
+
+            # print log
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            if (i + 1) % print_freq == 0:
+
+                if use_xbm:
+                    print('Epoch: [{}][{}/{}]\t'
+                          'Time {:.3f} ({:.3f}) '
+                          'Data {:.3f} ({:.3f}) '
+                          'Loss {:.3f} ({:.3f}) '
+                          'Loss_ce {:.3f} ({:.3f}) '
+                          'Loss_tri {:.3f} ({:.3f}) '
+                          'Loss_xbm {:.3f} ({:.3f}) '
+                          'Prec_s {:.2%} ({:.2%}) '
+                          .format(epoch, i + 1, len(data_loader_source),
+                                  batch_time.val, batch_time.avg,
+                                  data_time.val, data_time.avg,
+                                  losses.val, losses.avg,
+                                  losses_ce.val, losses_ce.avg,
+                                  losses_tri.val, losses_tri.avg,
+                                  losses_xbm.val, losses_xbm.avg,
+                                  precisions_s.val, precisions_s.avg,
+
+                                  ))
+                else:
+                    print('Epoch: [{}][{}/{}]\t'
+                          'Time {:.3f} ({:.3f}) '
+                          'Data {:.3f} ({:.3f}) '
+                          'Loss {:.3f} ({:.3f}) '
+                          'Loss_ce {:.3f} ({:.3f}) '
+                          'Loss_tri {:.3f} ({:.3f}) '
+                          'Prec_s {:.2%} ({:.2%}) '
+                          .format(epoch, i + 1, len(data_loader_source),
+                                  batch_time.val, batch_time.avg,
+                                  data_time.val, data_time.avg,
+                                  losses.val, losses.avg,
+                                  losses_ce.val, losses_ce.avg,
+                                  losses_tri.val, losses_tri.avg,
+                                  precisions_s.val, precisions_s.avg,
+                                  precisions_t.val, precisions_t.avg
+                                  ))
+
+    def _parse_data(self, inputs):
+        imgs, _, pids, _, indexes = inputs
+        return imgs.cuda(), pids.cuda(), indexes.cuda()
+
+    def _forward(self, inputs):
+        return self.model(inputs)
 class IDM_Trainer(object):
     def __init__(self, model, xbm, num_classes, margin=None, mu1=1.0, mu2=1.0, mu3=1.0):
         super(IDM_Trainer, self).__init__()
