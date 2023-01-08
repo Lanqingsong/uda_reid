@@ -4,9 +4,11 @@ from torch.nn import functional as F
 
 class Swim(SwinTransformerV2):
 
-    def __init__(self,  **kwargs):
+    def __init__(self,num_classes,  **kwargs):
         super().__init__(**kwargs)
-        a = 0
+
+        self.classify_head = nn.Linear(self.num_features, num_classes)
+
         # split image into non-overlapping patches
 
     def forward_features(self, x):
@@ -24,12 +26,14 @@ class Swim(SwinTransformerV2):
     def forward_head(self, x, pre_logits: bool = False):
         if self.global_pool == 'avg':
             x = x.mean(dim=1)
-        return x, self.head(x)
+        return self.head(x)
 
     def forward(self, x):
         x = self.forward_features(x)
-        x, prob = self.forward_head(x)
+        x = self.forward_head(x)
+        prob = self.classify_head(x)
         x = F.normalize(x)
+
         if self.training is False:
             return x
         return prob, x
@@ -48,7 +52,7 @@ def swinv2_tiny_window16_256(pretrained=False, **kwargs):
     """
     """
     model_kwargs = dict(
-        img_size=(256, 128),window_size=16, embed_dim=96, depths=(2, 2, 6, 2), num_heads=(3, 6, 12, 24),num_classes=2000, **kwargs)
+        img_size=(256, 128),window_size=16, embed_dim=96, depths=(2, 2, 6, 2), num_heads=(3, 6, 12, 24), **kwargs)
     return _create_swin_transformer_v2('swinv2_tiny_window16_256', pretrained=pretrained, **model_kwargs)
 
 
