@@ -4,7 +4,7 @@ from torch.nn import functional as F
 
 class Swim(SwinTransformerV2):
 
-    def __init__(self,num_ids,  **kwargs):
+    def __init__(self,num_ids=512,  **kwargs):
         super().__init__(**kwargs)
 
         self.classify_head = nn.Linear(self.num_classes, num_ids)
