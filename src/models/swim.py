@@ -4,10 +4,10 @@ from torch.nn import functional as F
 
 class Swim(SwinTransformerV2):
 
-    def __init__(self,num_classes,  **kwargs):
+    def __init__(self,num_ids,  **kwargs):
         super().__init__(**kwargs)
 
-        self.classify_head = nn.Linear(self.num_features, num_classes)
+        self.classify_head = nn.Linear(self.num_classes, num_ids)
 
         # split image into non-overlapping patches
 
