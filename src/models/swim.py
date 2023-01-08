@@ -4,7 +4,7 @@ from torch.nn import functional as F
 
 class Swim(SwinTransformerV2):
 
-    def __init__(self,num_ids=512,  **kwargs):
+    def __init__(self, num_ids=512,  **kwargs):
         super().__init__(**kwargs)
 
         self.classify_head = nn.Linear(self.num_classes, num_ids)
@@ -52,7 +52,7 @@ def swinv2_tiny_window16_256(pretrained=False, **kwargs):
     """
     """
     model_kwargs = dict(
-        img_size=(256, 128),window_size=16, embed_dim=96, depths=(2, 2, 6, 2), num_heads=(3, 6, 12, 24), **kwargs)
+        num_ids=512,img_size=(256, 128),window_size=16, embed_dim=96, depths=(2, 2, 6, 2), num_heads=(3, 6, 12, 24), **kwargs)
     return _create_swin_transformer_v2('swinv2_tiny_window16_256', pretrained=pretrained, **model_kwargs)
 
 
