@@ -72,8 +72,8 @@ class ResNetIBN(nn.Module):
         if not pretrained:
             self.reset_params()
 
-        for param in self.parameters():
-            param.requires_grad = False
+#         for param in self.parameters():
+#             param.requires_grad = False
         self.conv_bottle = nn.Conv2d(2048, 1024, kernel_size=(3,3),padding=1,bias=False)
         self.convTrans6 = nn.Sequential(
             nn.ConvTranspose2d(in_channels=1024, out_channels=512,  output_padding=(1,1),kernel_size=(3,3), stride=(2,2),
@@ -109,8 +109,8 @@ class ResNetIBN(nn.Module):
         # x = self.base3(x)#32,1024,16,8
         # x = self.base4(x)#32,2048,16,8
         inputs = x
-        with torch.no_grad():
-            x = self.base(x)
+#         with torch.no_grad():
+        x = self.base(x)
         ##todo
         y =self.conv_bottle(x)#1054,16,8
         y =  self.convTrans6(y) #512, 32 16
