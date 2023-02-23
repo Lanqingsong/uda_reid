@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import init
 from .resnet_ibn_a import resnet50_ibn_a, resnet101_ibn_a
-
+import torch
 
 __all__ = ['ResNetIBN', 'resnet_ibn50a', 'resnet_ibn101a']
 
@@ -26,9 +26,18 @@ class ResNetIBN(nn.Module):
         resnet = ResNetIBN.__factory[depth](pretrained=pretrained)
         resnet.layer4[0].conv2.stride = (1,1)
         resnet.layer4[0].downsample[0].stride = (1,1)
+
         self.base = nn.Sequential(
             resnet.conv1, resnet.bn1, resnet.relu, resnet.maxpool,
             resnet.layer1, resnet.layer2, resnet.layer3, resnet.layer4)
+
+
+        # self.base0 =  nn.Sequential( resnet.conv1, resnet.bn1, resnet.relu, resnet.maxpool)
+        # self.base1 = nn.Sequential( resnet.layer1)
+        # self.base2 = nn.Sequential( resnet.layer2)
+        # self.base3 = nn.Sequential( resnet.layer3)
+        # self.base4 = nn.Sequential( resnet.layer4)
+
         self.gap = nn.AdaptiveAvgPool2d(1)
 
         if not self.cut_at_pooling:
@@ -59,11 +68,59 @@ class ResNetIBN(nn.Module):
         init.constant_(self.feat_bn.weight, 1)
         init.constant_(self.feat_bn.bias, 0)
 
+
         if not pretrained:
             self.reset_params()
 
+        for param in self.parameters():
+            param.requires_grad = False
+        self.conv_bottle = nn.Conv2d(2048, 1024, kernel_size=(3,3),padding=1,bias=False)
+        self.convTrans6 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=1024, out_channels=512,  output_padding=(1,1),kernel_size=(3,3), stride=(2,2),
+                               padding=(1,1)),
+            nn.BatchNorm2d(512, momentum=0.01),
+            nn.ReLU(inplace=True),
+        )
+        self.convTrans7 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=512, out_channels=256,  output_padding=(1,1),kernel_size=(3,3), stride=(2,2),
+                               padding=(1,1)),
+            nn.BatchNorm2d(256, momentum=0.01),
+            nn.ReLU(inplace=True),
+        )
+        self.convTrans8 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=256, out_channels=64,  output_padding=(1,1),kernel_size=(3,3), stride=(2,2),
+                               padding=(1,1)),
+            nn.BatchNorm2d(64, momentum=0.01),
+            nn.ReLU(inplace=True),
+        )
+
+        self.convTrans9 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=64, out_channels=3,  output_padding=(1,1),kernel_size=(5,5), stride=(2,2),
+                               padding=(2,2)),
+            # nn.BatchNorm2d(64, momentum=0.01),
+            # nn.ReLU(inplace=True),
+        )
+
+
     def forward(self, x):
-        x = self.base(x)
+        # x = self.base0(x)#32,64,64,32
+        # x = self.base1(x)#32,256,64,32
+        # x = self.base2(x)#32,512,32,16
+        # x = self.base3(x)#32,1024,16,8
+        # x = self.base4(x)#32,2048,16,8
+        inputs = x
+        with torch.no_grad():
+            x = self.base(x)
+        ##todo
+        y =self.conv_bottle(x)#1054,16,8
+        y =  self.convTrans6(y) #512, 32 16
+        y =  self.convTrans7(y)#256, 64 32
+        y = self.convTrans8(y)
+        y = self.convTrans9(y)#32,3,256,128
+
+        y=F.mse_loss(y,inputs)
+
+        ##
 
         x = self.gap(x)
         x = x.view(x.size(0), -1)
@@ -91,9 +148,9 @@ class ResNetIBN(nn.Module):
         if self.num_classes > 0:
             prob = self.classifier(bn_x)
         else:
-            return bn_x
+            return bn_x, y
 
-        return prob, x
+        return prob, x, y
 
     def reset_params(self):
         for m in self.modules():
