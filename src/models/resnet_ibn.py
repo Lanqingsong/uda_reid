@@ -112,11 +112,12 @@ class ResNetIBN(nn.Module):
 #         with torch.no_grad():
         x = self.base(x)
         ##todo
-        y =self.conv_bottle(x)#1054,16,8
-        y =  self.convTrans6(y) #512, 32 16
-        y =  self.convTrans7(y)#256, 64 32
-        y = self.convTrans8(y)
-        y = self.convTrans9(y)#32,3,256,128
+        with torch.no_grad():
+            y =self.conv_bottle(x)#1054,16,8
+            y =  self.convTrans6(y) #512, 32 16
+            y =  self.convTrans7(y)#256, 64 32
+            y = self.convTrans8(y)
+            y = self.convTrans9(y)#32,3,256,128
 
         y=F.mse_loss(y,inputs)
 
